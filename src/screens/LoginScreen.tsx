@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import { useAuth } from '../AuthContext'; // Путь к AuthContext: из src/screens/ -> src/AuthContext.tsx, это один ../
+import { useAuth } from '../AuthContext'; // Путь из src/screens/ к src/AuthContext.tsx
 
 function LoginScreen({ navigation }: any) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  const { onLogin } = useAuth(); 
+  // ИСПОЛЬЗУЕМ `login` ИЗ НОВОГО AuthContext
+  const { login } = useAuth(); 
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -18,13 +19,12 @@ function LoginScreen({ navigation }: any) {
     setIsLoading(true);
 
     try {
-      const result = await onLogin(username, password); 
+      // Вызываем `login`
+      const result = await login(username, password); 
 
       if (result.success) {
-        // УСПЕШНЫЙ ВХОД: УДАЛЯЕМ ЯВНУЮ НАВИГАЦИЮ.
-        // AppNavigator (в App.tsx) автоматически переключится на AppStack,
-        // когда authState.authenticated станет true, и отобразит MainScreen.
-        // navigation.navigate('Main'); // <-- ЭТА СТРОКА УДАЛЕНА
+        // Навигация теперь управляется App.tsx, который реагирует на изменение authState.authenticated
+        // navigation.navigate('Main'); // Эту строку мы удаляли
       } else {
         Alert.alert('Ошибка входа', result.error || 'Неизвестная ошибка при входе.');
       }

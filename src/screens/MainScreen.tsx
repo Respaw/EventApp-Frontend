@@ -1,193 +1,202 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Button, Alert, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, Button, Alert, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../AuthContext'; // Путь из src/screens/ к src/AuthContext.tsx
+import api from '../../utils/api'; // Путь из src/screens/ к utils/api.ts
 
-// Типы для Event
-type Event = {
+// Типы
+interface Event {
   id: number;
   title: string;
+  description: string | null;
   location: string;
-  organizer: string;
-  participants_count: number;
-};
+  event_time: string; // ISO string
+  organizer: number; // ID пользователя
+  required_participants: number | null;
+  current_participants: number; // Предполагаем, что бэкенд будет отдавать это
+  required_funds: string | null; // DecimalField в Django, обычно строка в JSON
+  current_funds: string; // Предполагаем, что бэкенд будет отдавать это
+}
 
-function MainScreen({ navigation }: any) {
-  const { authState, onLogout } = useAuth();
+const MainScreen = ({ navigation }: any) => {
+  // ИСПОЛЬЗУЕМ `logout` ИЗ НОВОГО AuthContext И `authState`
+  const { authState, logout } = useAuth(); 
   const [events, setEvents] = useState<Event[]>([]);
-  const [isLoading, setIsLoading] = useState(false); // Для загрузки списка событий
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchEvents = useCallback(async () => {
-    if (!authState?.accessToken) return; // Не пытаемся загрузить, если нет токена
-
     setIsLoading(true);
+    setError(null);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/events/', {
-        headers: {
-          'Authorization': `Bearer ${authState.accessToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          Alert.alert('Сессия истекла', 'Пожалуйста, войдите снова.');
-          onLogout();
-        }
-        throw new Error('Не удалось загрузить события');
+      // API-запрос к эндпоинту получения событий
+      const response = await api.get('/events/'); // Убедитесь, что этот эндпоинт правильный
+      setEvents(response.data);
+    } catch (err: any) {
+      console.error('Error fetching events:', err);
+      if (err.response && err.response.status === 401) {
+        Alert.alert('Сессия истекла', 'Пожалуйста, войдите снова.', [
+          { text: 'OK', onPress: logout } // Перенаправляем на вход при 401
+        ]);
+      } else {
+        setError('Не удалось загрузить события. ' + (err.response?.data?.detail || err.message));
       }
-
-      const data: Event[] = await response.json();
-      setEvents(data);
-    } catch (error: any) {
-      Alert.alert('Ошибка', error.message);
-      console.error(error);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  }, [authState?.accessToken, onLogout]); // Зависимость от токена и onLogout
+  }, [logout]); // logout теперь является зависимостью
 
-  // Используем useFocusEffect для перезагрузки данных при фокусе на экране
+  // Загрузка событий при фокусировке на экране
   useFocusEffect(
     useCallback(() => {
-      if (authState?.authenticated) {
-        fetchEvents();
-      }
+      fetchEvents();
       return () => {
         // Очистка при разфокусировке, если нужно
       };
-    }, [authState?.authenticated, fetchEvents])
+    }, [fetchEvents])
   );
 
-  const handleCreateEventPress = () => {
-    navigation.navigate('CreateEvent');
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchEvents();
   };
 
-  const handleEventPress = (eventId: number) => {
-    navigation.navigate('EventDetail', { eventId });
-  };
+  const renderEventItem = ({ item }: { item: Event }) => (
+    <View style={styles.eventCard}>
+      <Text style={styles.eventTitle}>{item.title}</Text>
+      <Text style={styles.eventLocation}>{item.location}</Text>
+      <Text style={styles.eventTime}>{new Date(item.event_time).toLocaleString()}</Text>
+      {/* TODO: Добавить отображение суммы, участников, прогресс-бара */}
+      <Button 
+        title="Подробнее" 
+        onPress={() => navigation.navigate('EventDetail', { eventId: item.id, eventTitle: item.title })} 
+      />
+    </View>
+  );
 
-  if (isLoading) {
+  if (isLoading && !isRefreshing) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color="#0000ff" />
-        <Text style={styles.loadingText}>Загрузка событий...</Text>
+        <Text>Загрузка событий...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>{error}</Text>
+        <Button title="Повторить" onPress={fetchEvents} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Мои события</Text>
-        <Button title="Выйти" onPress={onLogout} />
-      </View>
-      
+    <View style={styles.container}>
+      <Text style={styles.welcomeText}>
+        Привет, {authState.user?.username || 'пользователь'}!
+      </Text>
       <FlatList
         data={events}
+        renderItem={renderEventItem}
         keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.eventCard} onPress={() => handleEventPress(item.id)}>
-            <Text style={styles.eventTitle}>{item.title}</Text>
-            <Text style={styles.eventLocation}>{item.location}</Text>
-            <View style={styles.eventInfo}>
-              <Text style={styles.eventOrganizer}>Организатор: {item.organizer}</Text>
-              <Text style={styles.eventParticipants}>Участников: {item.participants_count}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={<Text style={styles.emptyText}>У вас пока нет событий. Создайте первое!</Text>}
-        refreshing={isLoading}
-        onRefresh={fetchEvents}
+        ListEmptyComponent={<Text style={styles.emptyListText}>Событий пока нет. Создайте первое!</Text>}
+        contentContainerStyle={events.length === 0 && styles.emptyListContainer}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+        }
       />
-
-      <View style={styles.footer}>
-        <Button title="Создать событие" onPress={handleCreateEventPress} />
-      </View>
-    </SafeAreaView>
+      {/* ИСПОЛЬЗУЕМ TouchableOpacity ВМЕСТО Button ДЛЯ СТИЛИЗАЦИИ */}
+      <TouchableOpacity 
+        style={styles.createButton} 
+        onPress={() => navigation.navigate('CreateEvent')} 
+      >
+        <Text style={styles.createButtonText}>Создать новое событие</Text>
+      </TouchableOpacity>
+      
+      {/* Кнопка "Выйти" может оставаться Button, если ей не нужны кастомные стили */}
+      <Button title="Выйти" onPress={logout} />
+    </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  loadingContainer: {
+  container: {
+    flex: 1,
+    padding: 10,
+    backgroundColor: '#f0f2f5',
+  },
+  centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 18,
-    color: '#666',
+  errorText: {
+    color: 'red',
+    fontSize: 16,
+    marginBottom: 10,
+    textAlign: 'center',
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F3F3',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-  },
-  headerTitle: {
-    fontSize: 24,
+  welcomeText: {
+    fontSize: 20,
     fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
     color: '#333',
   },
   eventCard: {
-    backgroundColor: 'white',
-    padding: 20,
-    marginVertical: 8,
-    marginHorizontal: 16,
-    borderRadius: 10,
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
   },
   eventTitle: {
     fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 5,
     color: '#333',
   },
   eventLocation: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  eventInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderColor: '#eee',
-    paddingTop: 8,
-  },
-  eventOrganizer: {
-    fontSize: 12,
-    color: '#888',
-  },
-  eventParticipants: {
-    fontSize: 12,
-    color: '#888',
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 50,
     fontSize: 16,
     color: '#666',
+    marginBottom: 3,
   },
-  footer: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderColor: '#eee',
-    backgroundColor: 'white',
+  eventTime: {
+    fontSize: 14,
+    color: '#999',
+    marginBottom: 10,
+  },
+  emptyListText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#777',
+    marginTop: 20,
+  },
+  emptyListContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+    createButton: {
+    backgroundColor: '#007bff', // Пример цвета
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 
