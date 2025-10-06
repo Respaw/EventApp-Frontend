@@ -1,65 +1,65 @@
-// App.tsx
-import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+// В App.tsx
+import { NavigationContainer, CommonActions, NavigationProp } from '@react-navigation/native'; // <--- Добавил NavigationProp
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { AuthProvider, useAuth } from './src/AuthContext';
+import { StatusBar, View, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// Импорты экранов
-import MainScreen from './src/screens/MainScreen';
-import CreateEventScreen from './src/screens/CreateEventScreen';
+import { AuthProvider, useAuth } from './src/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
-import EventDetailScreen from './src/screens/EventDetailScreen';
+import MainScreen from './src/screens/MainScreen';
+import CreateEventScreen from './src/screens/CreateEventScreen';
+import EventDetailScreen from './src/screens/EventDetailScreen'; // <--- Убедитесь, что этот импорт есть
 
-const Stack = createNativeStackNavigator();
+// --- RootStackParamList должен быть определен ЗДЕСЬ и быть одинаковым везде ---
+type RootStackParamList = {
+  Login: undefined;
+  Register: undefined;
+  Main: undefined;
+  CreateEvent: undefined; // Добавлено
+  EventDetail: { eventId: number; eventTitle: string }; // Добавлено
+};
 
-const AppNavigator = () => {
-  const { authState, initializing } = useAuth();
+const Stack = createNativeStackNavigator<RootStackParamList>(); // <--- Типизация для Stack
 
-  if (initializing) {
+const AppContent = () => {
+  const { authenticated, loading } = useAuth();
+
+  if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" />
-        <Text>Загрузка приложения...</Text>
       </View>
     );
   }
 
   return (
-    <Stack.Navigator>
-      {authState.authenticated ? (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {authenticated ? (
         <>
-          <Stack.Screen name="Main" component={MainScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="CreateEvent" component={CreateEventScreen} options={{ title: 'Новое событие' }} />
-          <Stack.Screen
-            name="EventDetail"
-            component={EventDetailScreen}
-            options={({ route }: any) => ({ title: route.params?.eventTitle || 'Детали' })}
-          />
+          <Stack.Screen name="Main" component={MainScreen} />
+          <Stack.Screen name="CreateEvent" component={CreateEventScreen} options={{ headerShown: true, title: 'Новое событие' }} />
+          <Stack.Screen name="EventDetail" component={EventDetailScreen} options={{ headerShown: true }} />
         </>
       ) : (
         <>
-          <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Регистрация' }} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
         </>
       )}
     </Stack.Navigator>
   );
 };
 
-function App() {
+export default function App() {
   return (
-    <AuthProvider>
+    <SafeAreaProvider>
       <NavigationContainer>
-        <AppNavigator />
+        <StatusBar barStyle="dark-content" />
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
       </NavigationContainer>
-    </AuthProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-});
-
-export default App;

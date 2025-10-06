@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useAuth } from '../AuthContext'; // Путь из src/screens/ к src/AuthContext.tsx
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 function LoginScreen({ navigation }: any) {
   const [username, setUsername] = useState('');
@@ -54,6 +55,8 @@ function LoginScreen({ navigation }: any) {
         onChangeText={setPassword}
         secureTextEntry
         editable={!isLoading}
+        textContentType="password" // <--- Для СУЩЕСТВУЮЩЕГО пароля
+        autoComplete="current-password"
       />
       <Button 
         title={isLoading ? "Вход..." : "Войти"} 

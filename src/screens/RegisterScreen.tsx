@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 function RegisterScreen({ navigation }: any) {
   const [username, setUsername] = useState('');
@@ -55,6 +56,9 @@ function RegisterScreen({ navigation }: any) {
         onChangeText={setUsername}
         autoCapitalize="none"
         editable={!isLoading}
+        textContentType="none" // Или "addressCityAndState" если хотите, но 'none' безопаснее
+        autoComplete="off"     // Для iOS
+        autoCorrect={false}    // Часто полезно для таких полей
       />
       <TextInput
         style={styles.input}
@@ -63,6 +67,8 @@ function RegisterScreen({ navigation }: any) {
         onChangeText={setPassword}
         secureTextEntry
         editable={!isLoading}
+        textContentType="newPassword" // <--- Это для создания НОВОГО пароля
+        autoComplete="new-password"   // <--- Для автозаполнения НОВОГО пароля
       />
       <TextInput
         style={styles.input}
@@ -71,6 +77,8 @@ function RegisterScreen({ navigation }: any) {
         onChangeText={setPasswordConfirm}
         secureTextEntry
         editable={!isLoading}
+        textContentType="newPassword" // <--- Это для создания НОВОГО пароля
+        autoComplete="new-password"   // <--- Для автозаполнения НОВОГО пароля
       />
       <Button title={isLoading ? "Регистрация..." : "Зарегистрироваться"} onPress={handleRegister} disabled={isLoading} />
       {isLoading && <ActivityIndicator size="small" color="#0000ff" style={styles.activityIndicator} />}
